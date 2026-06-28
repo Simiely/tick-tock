@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>整点报时</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f0f1a;
+    --card: #1a1a2e;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --accent: #ffd700;
+    --accent2: #4fc3f7;
+    --border: #2a2a40;
+    --switch-on: #4caf50;
+    --switch-off: #555;
+    --shadow: rgba(0,0,0,0.4);
+  }
+
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    transition: background 0.3s;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: 24px;
+    padding: 32px 24px;
+    box-shadow: 0 8px 32px var(--shadow);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ---- 时钟主显示 ---- */
+  .clock-section {
+    text-align: center;
+    padding: 16px 0 24px;
+    position: relative;
+  }
+
+  .clock-section::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 10%;
+    width: 80%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.3;
+  }
+
+  .date-display {
+    font-size: 15px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .time-display {
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 30%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .time-display .seconds {
+    font-size: 28px;
+    -webkit-text-fill-color: var(--text-dim);
+    opacity: 0.6;
+  }
+
+  .period-display {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    letter-spacing: 2px;
+  }
+
+  .next-chime {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--accent2);
+    opacity: 0.8;
+    letter-spacing: 1px;
+  }
+
+  /* ---- 报时状态 ---- */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: 0.3s;
+  }
+
+  .status-dot.on  { background: var(--switch-on); box-shadow: 0 0 8px var(--switch-on); }
+  .status-dot.off { background: var(--switch-off); }
+
+  /* ---- 报时动画 ---- */
+  .chime-indicator {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .chime-ring {
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    opacity: 0;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.5);
+    transition: none;
+  }
+
+  .chime-ring.active {
+    animation: ring-expand 1.2s ease-out forwards;
+  }
+
+  @keyframes ring-expand {
+    0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
+    100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+  }
+
+  /* ---- 报时记录 ---- */
+  .log-section {
+    margin-top: 20px;
+  }
+
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .log-header button {
+    background: none;
+    border: none;
+    color: var(--accent2);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 8px;
+    transition: 0.2s;
+  }
+
+  .log-header button:hover {
+    background: rgba(79,195,247,0.15);
+  }
+
+  .log-list {
+    max-height: 120px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .log-list::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .log-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+
+  .log-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+    color: var(--text-dim);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .log-item .log-time { color: var(--text); }
+  .log-item .log-desc { color: var(--accent); }
+
+  /* ---- 设置区域 ---- */
+  .settings-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .settings-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 16px;
+    letter-spacing: 1px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .setting-row:last-child {
+    border-bottom: none;
+  }
+
+  .setting-label {
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .setting-label small {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* ---- 开关 ---- */
+  .toggle {
+    position: relative;
+    width: 48px; height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .toggle input {
+    display: none;
+  }
+
+  .toggle .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--switch-off);
+    border-radius: 13px;
+    transition: 0.3s;
+  }
+
+  .toggle .slider::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 20px; height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.3s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+
+  .toggle input:checked + .slider {
+    background: var(--switch-on);
+  }
+
+  .toggle input:checked + .slider::after {
+    left: 25px;
+  }
+
+  /* ---- 音量滑块 ---- */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 120px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(255,215,0,0.4);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+
+  /* ---- 下拉选择 ---- */
+  select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    max-width: 150px;
+  }
+
+  /* ---- 语音状态 ---- */
+  .speaking-indicator {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 14px;
+    color: var(--accent);
+    animation: pulse-text 1.2s ease-in-out infinite;
+  }
+
+  .speaking-indicator.visible {
+    display: flex;
+  }
+
+  @keyframes pulse-text {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 1; }
+  }
+
+  .speaking-indicator .bar-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 20px;
+  }
+
+  .speaking-indicator .bar {
+    width: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+    animation: bar-bounce 0.5s ease-in-out infinite alternate;
+  }
+
+  .speaking-indicator .bar:nth-child(1) { height: 8px;  animation-delay: 0s; }
+  .speaking-indicator .bar:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+  .speaking-indicator .bar:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+  .speaking-indicator .bar:nth-child(4) { height: 16px; animation-delay: 0.15s; }
+  .speaking-indicator .bar:nth-child(5) { height: 6px;  animation-delay: 0.05s; }
+
+  @keyframes bar-bounce {
+    0%   { transform: scaleY(0.6); }
+    100% { transform: scaleY(1); }
+  }
+
+  /* ---- 免打扰时间选择器（滚轮） ---- */
+  .quiet-time-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .time-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 14px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: 0.2s;
+    font-variant-numeric: tabular-nums;
+    min-width: 52px;
+    text-align: center;
+  }
+
+  .time-btn:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(255,215,0,0.15);
+  }
+
+  .time-btn:active {
+    transform: scale(0.95);
+  }
+
+  .quiet-time-picker .sep {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  /* ---- 语音引擎状态 ---- */
+  .voice-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+    width: 100%;
+    justify-content: flex-end;
+    padding: 0 2px;
+  }
+
+  .voice-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: 0.3s;
+  }
+
+  .voice-dot.checking { background: #ff9800; box-shadow: 0 0 6px #ff9800; animation: pulse-dot 0.8s ease-in-out infinite; }
+  .voice-dot.ok       { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+  .voice-dot.warn     { background: #f44336; box-shadow: 0 0 6px #f44336; }
+  .voice-dot.off      { background: #555; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 1; }
+  }
+
+  /* ---- 滚轮弹窗 ---- */
+  .picker-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: flex-end;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .picker-overlay.open {
+    display: flex;
+  }
+
+  .picker-modal {
+    background: var(--card);
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 420px;
+    padding: 20px 16px 28px;
+    border-top: 1px solid var(--border);
+    animation: slide-up 0.3s ease-out;
+  }
+
+  @keyframes slide-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+
+  .picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+
+  .picker-header .title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .picker-cols {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .picker-col {
+    text-align: center;
+    flex: 1;
+    max-width: 120px;
+  }
+
+  .picker-col-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .picker-wheel-wrap {
+    position: relative;
+    height: 160px;
+    overflow: hidden;
+    border-radius: 12px;
+  }
+
+  .picker-wheel-wrap::before,
+  .picker-wheel-wrap::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 56px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .picker-wheel-wrap::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--card) 20%, transparent);
+  }
+
+  .picker-wheel-wrap::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--card) 20%, transparent);
+  }
+
+  .picker-wheel-highlight {
+    position: absolute;
+    top: 50%; left: 10%;
+    right: 10%;
+    height: 40px;
+    transform: translateY(-50%);
+    background: rgba(255,215,0,0.08);
+    border-radius: 8px;
+    border: 1px solid rgba(255,215,0,0.15);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .picker-wheel {
+    height: 100%;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 60px 0;
+    scrollbar-width: none;
+  }
+
+  .picker-wheel::-webkit-scrollbar {
+    display: none;
+  }
+
+  .picker-wheel-item {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-dim);
+    scroll-snap-align: center;
+    transition: color 0.15s, font-size 0.15s;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .picker-wheel-item.active {
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .picker-footer {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .picker-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  .picker-btn-cancel {
+    background: var(--bg);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .picker-btn-cancel:active {
+    transform: scale(0.97);
+  }
+
+  .picker-btn-confirm {
+    background: linear-gradient(135deg, var(--accent), #ffaa00);
+    color: #1a1a2e;
+  }
+
+  .picker-btn-confirm:active {
+    transform: scale(0.97);
+  }
+
+  /* ---- 通知按钮 ---- */
+  .test-btn {
+    margin-top: 12px;
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--accent), #ffaa00);
+    color: #1a1a2e;
+    border: none;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+    letter-spacing: 1px;
+  }
+
+  .test-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(255,215,0,0.3);
+  }
+
+  .test-btn:active {
+    transform: scale(0.97);
+  }
+
+  /* ---- 响应式 ---- */
+  @media (max-width: 420px) {
+    .card { padding: 20px 16px; border-radius: 18px; }
+    .time-display { font-size: 48px; }
+    .time-display .seconds { font-size: 20px; }
+    .setting-row { flex-wrap: wrap; gap: 6px; }
+    input[type="range"] { width: 100px; }
+  }
+
+  /* ---- 免打扰提示 ---- */
+  .dnd-badge {
+    display: none;
+    background: rgba(255,152,0,0.15);
+    color: #ff9800;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-top: 8px;
+    text-align: center;
+    border: 1px solid rgba(255,152,0,0.2);
+  }
+
+  .dnd-badge.visible {
+    display: block;
+  }
+
+  /* ---- 睡眠模式(深色变化) ---- */
+  body.dnd-mode {
+    --bg: #080810;
+    --card: #12121e;
+    --text-dim: #666;
+    --border: #1e1e30;
+  }
+
+  /* toast 提示 */
+  .toast {
+    position: fixed;
+    bottom: 30px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--card);
+    color: var(--text);
+    padding: 10px 24px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    opacity: 0;
+    transition: 0.4s;
+    pointer-events: none;
+    z-index: 999;
+    white-space: nowrap;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <!-- 时钟 -->
+    <div class="clock-section">
+      <div class="chime-indicator" id="chimeIndicator">
+        <div class="chime-ring" id="chimeRing"></div>
+      </div>
+
+      <div class="date-display" id="dateDisplay">----年--月--日 星期-</div>
+
+      <div class="time-display">
+        <span id="hourDisplay">00</span>:<span id="minDisplay">00</span>
+        <span class="seconds" id="secDisplay">00</span>
+      </div>
+      <div class="period-display" id="periodDisplay">午夜</div>
+      <div class="next-chime" id="nextChime">⏰ 距下次报时 --分--秒</div>
+      <div class="speaking-indicator" id="speakingIndicator">
+        <span>🔊 语音播报中</span>
+        <span class="bar-group">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </span>
+      </div>
+    </div>
+
+    <!-- 状态 -->
+    <div class="status-bar">
+      <span class="status-dot on" id="statusDot"></span>
+      <span id="statusText">整点报时已开启</span>
+    </div>
+
+    <!-- 免打扰标签 -->
+    <div class="dnd-badge" id="dndBadge">🔕 免打扰时段，报时已静音</div>
+
+    <!-- 报时日志 -->
+    <div class="log-section">
+      <div class="log-header">
+        <span>📋 今日报时记录</span>
+        <button onclick="clearLog()">清空</button>
+      </div>
+      <div class="log-list" id="logList">
+        <div class="log-item" style="color:var(--text-dim);justify-content:center;padding:12px 0;">
+          暂无报时记录
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置 -->
+    <div class="settings-section">
+      <div class="settings-title">⚙️ 设置</div>
+
+      <!-- 开启报时 -->
+      <div class="setting-row">
+        <div class="setting-label">整点报时</div>
+        <label class="toggle">
+          <input type="checkbox" id="chimeEnabled" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- 报时风格 -->
+      <div class="setting-row">
+        <div class="setting-label">
+          报时风格
+          <small>语音播报或传统钟声</small>
+        </div>
+        <select id="chimeStyle">
+          <option value="voice">🗣️ 语音报时</option>
+          <option value="bigben">🔔 大本钟</option>
+          <option value="doorbell">🔔 门铃声</option>
+          <option value="melody">🎵 旋律</option>
+          <option value="soft">🔔 柔和</option>
+        </select>
+      </div>
+
+      <!-- 语音模式 -->
+      <div class="setting-row">
+        <div class="setting-label">
+          语音模式
+          <small>系统语音(离线) 或 在线语音</small>
+        </div>
+        <select id="voiceMode">
+          <option value="auto">🤖 自动（推荐）</option>
+          <option value="system">📡 系统语音（离线）</option>
+          <option value="online">🌐 在线语音（Google）</option>
+        </select>
+      </div>
+
+      <!-- 语音引擎状态 -->
+      <div class="setting-row" style="padding:4px 0 6px;">
+        <div class="voice-status" id="voiceStatus">
+          <span class="voice-dot checking" id="voiceDot"></span>
+          <span id="voiceStatusText">检测语音引擎…</span>
+        </div>
+      </div>
+
+      <!-- 音量 -->
+      <div class="setting-row">
+        <div class="setting-label">
+          音量
+          <small id="volumeLabel">80%</small>
+        </div>
+        <input type="range" id="volumeSlider" min="0" max="100" value="80">
+      </div>
+
+      <!-- 报时次数：整点 vs 半点 -->
+      <div class="setting-row">
+        <div class="setting-label">
+          报时频率
+          <small>整点和半点都报，或仅整点</small>
+        </div>
+        <select id="chimeFrequency">
+          <option value="hour">仅整点</option>
+          <option value="half">整点 + 半点</option>
+        </select>
+      </div>
+
+      <!-- 免打扰 -->
+      <div class="setting-row">
+        <div class="setting-label">
+          免打扰时段
+          <small>点击时间打开滚轮选择</small>
+        </div>
+        <div class="quiet-time-picker">
+          <button class="time-btn" id="quietStartBtn">22:00</button>
+          <span class="sep">至</span>
+          <button class="time-btn" id="quietEndBtn">07:00</button>
+        </div>
+      </div>
+
+      <!-- 振动 (移动端) -->
+      <div class="setting-row">
+        <div class="setting-label">
+          振动
+          <small>报时同时振动（移动端）</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="vibrateEnabled" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <button class="test-btn" id="testBtn">🔔 测试报时</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 滚轮选择器弹窗 -->
+<div class="picker-overlay" id="pickerOverlay">
+  <div class="picker-modal" id="pickerModal">
+    <div class="picker-header">
+      <span class="title">免打扰时段</span>
+    </div>
+    <div class="picker-cols">
+      <div class="picker-col">
+        <div class="picker-col-label">开始</div>
+        <div class="picker-wheel-wrap">
+          <div class="picker-wheel-highlight"></div>
+          <div class="picker-wheel" id="pickerWheelStart"></div>
+        </div>
+      </div>
+      <div class="picker-col">
+        <div class="picker-col-label">结束</div>
+        <div class="picker-wheel-wrap">
+          <div class="picker-wheel-highlight"></div>
+          <div class="picker-wheel" id="pickerWheelEnd"></div>
+        </div>
+      </div>
+    </div>
+    <div class="picker-footer">
+      <button class="picker-btn picker-btn-cancel" id="pickerCancel">取消</button>
+      <button class="picker-btn picker-btn-confirm" id="pickerConfirm">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  Web Audio — 不用外部音频文件
+// ============================================================
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+
+/** 播放一个音符 */
+function playNote(freq, startTime, duration, gainVal = 0.3, type = 'sine') {
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(gainVal, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+// ----- 音效风格 -----
+
+/** 大本钟风格：经典西敏寺钟声 / 小时敲击 */
+function playBigBen(hour) {
+  const ctx = getAudioCtx();
+  const t = ctx.currentTime;
+  const vol = getVolume();
+  const count = hour % 12 || 12;
+
+  // 前奏：4 个音符 (G4, A4, B4, C5 的变体)
+  const notes = [392, 440, 493.88, 523.25];
+  for (let i = 0; i < 4; i++) {
+    playNote(notes[i], t + i * 0.18, 0.25, vol * 0.3, 'triangle');
+  }
+
+  // 然后敲击小时次数
+  for (let i = 0; i < count; i++) {
+    playNote(130.81, t + 0.9 + i * 0.5, 0.45, vol * 0.5, 'sine'); // C3
+    // 泛音
+    playNote(261.63, t + 0.9 + i * 0.5, 0.35, vol * 0.15, 'sine'); // C4
+  }
+}
+
+/** 门铃声 */
+function playDoorbell() {
+  const ctx = getAudioCtx();
+  const t = ctx.currentTime;
+  const vol = getVolume();
+
+  // 双音门铃
+  playNote(880, t, 0.3, vol * 0.5, 'sine');
+  playNote(1108.73, t + 0.25, 0.4, vol * 0.5, 'sine');
+  // 第二次
+  playNote(880, t + 0.5, 0.3, vol * 0.5, 'sine');
+  playNote(1108.73, t + 0.75, 0.4, vol * 0.5, 'sine');
+}
+
+/** 旋律 */
+function playMelody() {
+  const ctx = getAudioCtx();
+  const t = ctx.currentTime;
+  const vol = getVolume();
+
+  // 上行音阶
+  const notes = [523.25, 587.33, 659.25, 783.99, 1046.5]; // C5 D5 E5 G5 C6
+  notes.forEach((f, i) => {
+    playNote(f, t + i * 0.12, 0.18, vol * 0.35, 'sine');
+  });
+  // 最后长音
+  playNote(1046.5, t + notes.length * 0.12, 0.6, vol * 0.4, 'sine');
+}
+
+/** 柔和 */
+function playSoft(hour) {
+  const ctx = getAudioCtx();
+  const t = ctx.currentTime;
+  const vol = getVolume();
+  const count = hour % 12 || 12;
+
+  for (let i = 0; i < count; i++) {
+    playNote(440, t + i * 0.3, 0.5, vol * 0.3, 'sine'); // A4
+  }
+}
+
+// ----- 语音报时 (Web Speech API) -----
+
+const PERIOD_SPEECH = {
+  '00': '午夜', '01': '凌晨', '02': '凌晨', '03': '凌晨', '04': '凌晨',
+  '05': '清晨', '06': '清晨', '07': '早晨', '08': '上午', '09': '上午',
+  '10': '上午', '11': '上午', '12': '中午', '13': '下午', '14': '下午',
+  '15': '下午', '16': '下午', '17': '傍晚', '18': '傍晚', '19': '晚上',
+  '20': '晚上', '21': '晚上', '22': '深夜', '23': '深夜',
+};
+
+/** 生成中文报时文本 */
+function buildTimeSpeech(hour, minute) {
+  const period = PERIOD_SPEECH[String(hour).padStart(2, '0')] || '';
+  // 12 小时制口语
+  let hour12 = hour % 12;
+  if (hour12 === 0) hour12 = 12;
+  const hourCn = numberToChinese(hour12);
+
+  if (minute === 0) {
+    return `现在时间，${period}${hourCn}点整。`;
+  } else if (minute === 30) {
+    return `现在时间，${period}${hourCn}点三十分。`;
+  } else {
+    const minCn = numberToChinese(minute);
+    return `现在时间，${period}${hourCn}点${minCn}分。`;
+  }
+}
+
+/** 数字转中文（1~59） */
+function numberToChinese(num) {
+  const digits = '零一二三四五六七八九';
+  const units = ['', '十', '百'];
+  if (num < 10) return digits[num];
+  if (num < 20) return '十' + (num % 10 === 0 ? '' : digits[num % 10]);
+  if (num < 100) {
+    const tens = Math.floor(num / 10);
+    const rem = num % 10;
+    return digits[tens] + '十' + (rem === 0 ? '' : digits[rem]);
+  }
+  return String(num);
+}
+
+// ============================================================
+//  语音报时 — 双引擎：系统语音 + 在线 TTS
+// ============================================================
+
+let speechSynth = null;
+let currentUtterance = null;
+let voiceEngineState = 'checking'; // 'checking' | 'ok' | 'warn' | 'off'
+let availableVoices = [];
+let chineseVoice = null;
+let onlineTTSAvailable = null; // true / false / 'checking'
+
+/** 获取语音合成引擎 */
+function getSpeechSynth() {
+  if (!speechSynth) {
+    speechSynth = window.speechSynthesis || null;
+  }
+  return speechSynth;
+}
+
+/** 检测语音引擎状态 */
+function checkVoiceEngine() {
+  const synth = getSpeechSynth();
+  if (!synth) {
+    setVoiceState('off', '❌ 系统语音不可用');
+    return;
+  }
+  const voices = synth.getVoices();
+  if (voices.length > 0) {
+    processVoices(voices);
+  } else {
+    synth.onvoiceschanged = () => {
+      const v = synth.getVoices();
+      if (v.length > 0) processVoices(v);
+    };
+    setTimeout(() => {
+      const v = synth.getVoices();
+      if (v.length > 0) processVoices(v);
+      else if (voiceEngineState === 'checking') {
+        setVoiceState('warn', '⚠️ 未检测到系统语音');
+      }
+    }, 2000);
+  }
+}
+
+/** 处理语音列表 */
+function processVoices(voices) {
+  availableVoices = voices;
+  chineseVoice = voices.find(v =>
+    v.lang.startsWith('zh') || v.lang.startsWith('cmn')
+  );
+  if (!chineseVoice) {
+    chineseVoice = voices.find(v =>
+      v.lang.startsWith('ja') || v.lang.startsWith('ko')
+    );
+  }
+  if (!chineseVoice) {
+    chineseVoice = voices[0];
+  }
+  if (chineseVoice) {
+    if (chineseVoice.lang.startsWith('zh') || chineseVoice.lang.startsWith('cmn')) {
+      setVoiceState('ok', `✓ 系统语音可用`);
+    } else {
+      setVoiceState('warn', `⚠️ 无中文系统语音`);
+    }
+  } else {
+    setVoiceState('warn', '⚠️ 未检测到系统语音');
+  }
+}
+
+/** 更新语音状态显示 */
+function setVoiceState(state, text) {
+  voiceEngineState = state;
+  const dot = document.getElementById('voiceDot');
+  const textEl = document.getElementById('voiceStatusText');
+  if (dot) dot.className = 'voice-dot ' + state;
+  if (textEl) {
+    let extra = '';
+    if (settings.style === 'voice') {
+      if (settings.voiceMode === 'online') {
+        extra = ' · 在线模式';
+      } else if (settings.voiceMode === 'auto' && (state === 'off' || state === 'warn')) {
+        extra = ' · 将使用在线语音';
+      }
+    }
+    textEl.textContent = (text || '') + extra;
+  }
+}
+
+/** 在线 TTS（Google Translate 接口） */
+function playOnlineTTS(text) {
+  return new Promise((resolve) => {
+    const url = 'https://translate.google.com/translate_tts'
+      + '?ie=UTF-8&client=tw-ob'
+      + '&tl=zh-CN'
+      + '&q=' + encodeURIComponent(text);
+
+    const audio = new Audio(url);
+    const indicator = document.getElementById('speakingIndicator');
+
+    audio.oncanplaythrough = () => {
+      onlineTTSAvailable = true;
+    };
+
+    audio.onplay = () => {
+      indicator.classList.add('visible');
+    };
+
+    audio.onended = () => {
+      indicator.classList.remove('visible');
+      resolve(true);
+    };
+
+    audio.onerror = () => {
+      indicator.classList.remove('visible');
+      onlineTTSAvailable = false;
+      console.warn('在线语音加载失败（可能无网络）');
+      resolve(false);
+    };
+
+    audio.volume = getVolume();
+    audio.play().catch(() => {
+      indicator.classList.remove('visible');
+      onlineTTSAvailable = false;
+      resolve(false);
+    });
+  });
+}
+
+/** 主语音播报：根据设置自动选择引擎 */
+async function speakTime(hour, minute) {
+  const text = buildTimeSpeech(hour, minute);
+  const mode = settings.voiceMode;
+  const indicator = document.getElementById('speakingIndicator');
+
+  // ----- 模式 1: 仅在线 -----
+  if (mode === 'online') {
+    const ok = await playOnlineTTS(text);
+    if (!ok) {
+      showToast('⚠️ 在线语音不可用，请检查网络');
+      return false;
+    }
+    return true;
+  }
+
+  // ----- 模式 2: 仅系统 -----
+  if (mode === 'system') {
+    const synth = getSpeechSynth();
+    if (!synth) {
+      showToast('⚠️ 系统语音不可用');
+      return false;
+    }
+    return speakSystemTTS(synth, text);
+  }
+
+  // ----- 模式 3: 自动（推荐）-----
+  // 先看系统语音是否可用
+  const synth = getSpeechSynth();
+  if (synth && (voiceEngineState === 'ok' || voiceEngineState === 'checking')) {
+    // 尝试系统语音
+    const systemOk = speakSystemTTS(synth, text);
+    if (systemOk) return true;
+
+    // 系统语音失败（可能是被拦截），等 1 秒后尝试在线
+    setVoiceState('warn', '⚠️ 系统语音被拦截');
+    showToast('⏳ 尝试在线语音…');
+    setTimeout(async () => {
+      await playOnlineTTS(text);
+    }, 500);
+    return true;
+  }
+
+  // 系统语音不可用 → 在线语音
+  setVoiceState('warn', '⚠️ 系统语音不可用，使用在线语音');
+  const ok = await playOnlineTTS(text);
+  if (!ok) {
+    showToast('⚠️ 系统语音和在线语音均不可用');
+    return false;
+  }
+  return true;
+}
+
+/** 用系统 TTS 播报（同步调用，返回是否成功提交） */
+function speakSystemTTS(synth, text) {
+  if (!synth) return false;
+
+  synth.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'zh-CN';
+  utterance.rate = 0.85;
+  utterance.pitch = 1.0;
+  utterance.volume = getVolume();
+
+  if (chineseVoice) {
+    utterance.voice = chineseVoice;
+  }
+  if (chineseVoice && chineseVoice.lang.startsWith('zh')) {
+    utterance.lang = chineseVoice.lang;
+  }
+
+  const indicator = document.getElementById('speakingIndicator');
+  utterance.onstart = () => {
+    indicator.classList.add('visible');
+    if (voiceEngineState === 'checking' || voiceEngineState === 'warn') {
+      setVoiceState('ok', '✓ 系统语音可用');
+    }
+  };
+  utterance.onend = () => {
+    indicator.classList.remove('visible');
+  };
+  utterance.onerror = () => {
+    indicator.classList.remove('visible');
+  };
+
+  try {
+    synth.speak(utterance);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ============================================================
+//  核心逻辑
+// ============================================================
+const CACHE_KEY = 'hourlyChimeSettings';
+const LOG_KEY = 'hourlyChimeLog';
+const TODAY_KEY = () => {
+  const d = new Date();
+  return `chimeLog_${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+};
+
+let settings = {
+  enabled: true,
+  style: 'voice',
+  voiceMode: 'auto',
+  volume: 80,
+  frequency: 'hour',    // 'hour' | 'half'
+  quietStart: 22,
+  quietEnd: 7,
+  vibrate: true,
+};
+
+let lastChimeMinute = -1;
+let logs = [];
+
+// 星期
+const WEEK_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
+const PERIOD_NAMES = {
+  '00': '午夜', '01': '凌晨', '02': '凌晨', '03': '凌晨', '04': '凌晨',
+  '05': '清晨', '06': '清晨', '07': '早晨', '08': '上午', '09': '上午',
+  '10': '上午', '11': '上午', '12': '中午', '13': '下午', '14': '下午',
+  '15': '下午', '16': '下午', '17': '傍晚', '18': '傍晚', '19': '晚上',
+  '20': '晚上', '21': '晚上', '22': '深夜', '23': '深夜',
+};
+
+/** 从 localStorage 加载设置和日志 */
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem(CACHE_KEY);
+    if (saved) Object.assign(settings, JSON.parse(saved));
+    const logData = localStorage.getItem(TODAY_KEY());
+    if (logData) logs = JSON.parse(logData);
+  } catch (_) {}
+}
+
+/** 保存设置 */
+function saveSettings() {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(settings));
+  } catch (_) {}
+}
+
+/** 保存日志 */
+function saveLog() {
+  try {
+    localStorage.setItem(TODAY_KEY(), JSON.stringify(logs));
+  } catch (_) {}
+}
+
+/** 获取音量 (0~1) */
+function getVolume() {
+  return settings.volume / 100;
+}
+
+/** 判断是否在免打扰时段 */
+function isQuietHours(hour) {
+  const { quietStart, quietEnd } = settings;
+  if (quietStart > quietEnd) {
+    // 跨天: 22~7
+    return hour >= quietStart || hour < quietEnd;
+  }
+  return hour >= quietStart && hour < quietEnd;
+}
+
+/** 应该报时吗 */
+function shouldChime(now) {
+  if (!settings.enabled) return false;
+
+  const h = now.getHours();
+  const m = now.getMinutes();
+
+  // 免打扰时段
+  if (isQuietHours(h)) return false;
+
+  if (settings.frequency === 'hour') {
+    return m === 0;
+  } else {
+    return m === 0 || m === 30;
+  }
+}
+
+/** 执行报时 */
+function doChime(now) {
+  const h = now.getHours();
+  const m = now.getMinutes();
+
+  if (lastChimeMinute === h * 60 + m) return; // 去重
+  lastChimeMinute = h * 60 + m;
+
+  const style = settings.style;
+
+  if (style === 'voice') {
+    // 语音报时
+    speakTime(h, m);
+  } else {
+    // 音效报时
+    try {
+      if (style === 'bigben') playBigBen(h);
+      else if (style === 'doorbell') playDoorbell();
+      else if (style === 'melody') playMelody();
+      else if (style === 'soft') playSoft(h);
+    } catch (e) {
+      console.warn('报时播放失败:', e);
+    }
+  }
+
+  // 振动
+  if (settings.vibrate && navigator.vibrate) {
+    navigator.vibrate(300);
+  }
+
+  // 动画
+  triggerChimeAnimation();
+
+  // 记录日志
+  const label = m === 0 ? `整点` : `半点`;
+  const styleLabel = style === 'voice' ? '语音报时' : style;
+  const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  logs.unshift({ time: timeStr, label, style: styleLabel });
+  if (logs.length > 50) logs.pop();
+  saveLog();
+  renderLog();
+
+  // 显示 toast
+  showToast(`🔔 ${timeStr} ${label}报时`);
+}
+
+/** 报时波纹动画 */
+function triggerChimeAnimation() {
+  const ring = document.getElementById('chimeRing');
+  ring.classList.remove('active');
+  // 触发 reflow
+  void ring.offsetWidth;
+  ring.classList.add('active');
+}
+
+// ============================================================
+//  UI 更新
+// ============================================================
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = now.getMinutes();
+  const s = now.getSeconds();
+  const day = now.getDate();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const week = WEEK_NAMES[now.getDay()];
+
+  document.getElementById('hourDisplay').textContent = String(h).padStart(2, '0');
+  document.getElementById('minDisplay').textContent = String(m).padStart(2, '0');
+  document.getElementById('secDisplay').textContent = String(s).padStart(2, '0');
+  document.getElementById('dateDisplay').textContent =
+    `${year}年${month}月${day}日 星期${week}`;
+  document.getElementById('periodDisplay').textContent =
+    PERIOD_NAMES[String(h).padStart(2, '0')] || '';
+
+  // 距下次报时
+  let targetMin = 60;
+  if (settings.frequency === 'half') {
+    if (m < 30) targetMin = 30;
+    else targetMin = 60;
+  }
+  const remainMin = targetMin - m - 1;
+  const remainSec = 59 - s;
+  const nextLabel = targetMin === 60 ? '整点' : '半点';
+  if (settings.enabled && !isQuietHours(h)) {
+    document.getElementById('nextChime').textContent =
+      `⏰ 距下次${nextLabel}报时 ${remainMin}分${remainSec}秒`;
+  } else if (isQuietHours(h)) {
+    document.getElementById('nextChime').textContent = `🔕 免打扰时段中`;
+  } else {
+    document.getElementById('nextChime').textContent = `⏰ 报时已关闭`;
+  }
+
+  // 检查报时
+  if (shouldChime(now)) {
+    doChime(now);
+  }
+
+  // 免打扰 badge
+  const dndBadge = document.getElementById('dndBadge');
+  if (isQuietHours(h)) {
+    dndBadge.classList.add('visible');
+    document.body.classList.add('dnd-mode');
+  } else {
+    dndBadge.classList.remove('visible');
+    document.body.classList.remove('dnd-mode');
+  }
+}
+
+/** 渲染日志 */
+function renderLog() {
+  const el = document.getElementById('logList');
+  if (logs.length === 0) {
+    el.innerHTML = `<div class="log-item" style="color:var(--text-dim);justify-content:center;padding:12px 0;">
+      暂无报时记录
+    </div>`;
+    return;
+  }
+  el.innerHTML = logs.map(item =>
+    `<div class="log-item">
+      <span class="log-time">${item.time}</span>
+      <span class="log-desc">🔔 ${item.label} · ${item.style}</span>
+    </div>`
+  ).join('');
+}
+
+/** Toast */
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/** 清空日志 */
+function clearLog() {
+  logs = [];
+  saveLog();
+  renderLog();
+  showToast('报时记录已清空');
+}
+
+// ============================================================
+//  UI 绑定
+// ============================================================
+function bindUI() {
+  // 开关
+  document.getElementById('chimeEnabled').checked = settings.enabled;
+  document.getElementById('chimeEnabled').addEventListener('change', e => {
+    settings.enabled = e.target.checked;
+    saveSettings();
+    updateStatusDisplay();
+  });
+
+  // 风格
+  document.getElementById('chimeStyle').value = settings.style;
+  document.getElementById('chimeStyle').addEventListener('change', e => {
+    settings.style = e.target.value;
+    saveSettings();
+    // 切回语音报时时刷新语音状态显示
+    if (e.target.value === 'voice') {
+      setVoiceState(voiceEngineState, '');
+    }
+  });
+
+  // 语音模式
+  document.getElementById('voiceMode').value = settings.voiceMode;
+  document.getElementById('voiceMode').addEventListener('change', e => {
+    settings.voiceMode = e.target.value;
+    saveSettings();
+    if (settings.style === 'voice') {
+      setVoiceState(voiceEngineState, '');
+      // 如果选了在线模式，可以立即测试一下
+      if (e.target.value === 'online') {
+        showToast('🌐 已切换至在线语音模式');
+      } else if (e.target.value === 'system') {
+        showToast('📡 已切换至系统语音模式');
+      } else {
+        showToast('🤖 已切换至自动模式');
+      }
+    }
+  });
+
+  // 音量
+  document.getElementById('volumeSlider').value = settings.volume;
+  document.getElementById('volumeLabel').textContent = settings.volume + '%';
+  document.getElementById('volumeSlider').addEventListener('input', e => {
+    settings.volume = parseInt(e.target.value);
+    document.getElementById('volumeLabel').textContent = settings.volume + '%';
+    saveSettings();
+  });
+
+  // 频率
+  document.getElementById('chimeFrequency').value = settings.frequency;
+  document.getElementById('chimeFrequency').addEventListener('change', e => {
+    settings.frequency = e.target.value;
+    saveSettings();
+  });
+
+  // ----- 免打扰滚轮选择器 -----
+  const pickerState = { target: 'start', value: 22 };
+  const startBtn = document.getElementById('quietStartBtn');
+  const endBtn = document.getElementById('quietEndBtn');
+  const pickerOverlay = document.getElementById('pickerOverlay');
+  const pickerWheelStart = document.getElementById('pickerWheelStart');
+  const pickerWheelEnd = document.getElementById('pickerWheelEnd');
+
+  function updateTimeButtons() {
+    startBtn.textContent = String(settings.quietStart).padStart(2, '0') + ':00';
+    endBtn.textContent = String(settings.quietEnd).padStart(2, '0') + ':00';
+  }
+
+  /** 构建滚轮 item */
+  function buildWheelItems(container, selectedValue) {
+    container.innerHTML = '';
+    for (let i = 0; i < 24; i++) {
+      const item = document.createElement('div');
+      item.className = 'picker-wheel-item' + (i === selectedValue ? ' active' : '');
+      item.textContent = String(i).padStart(2, '0');
+      item.dataset.value = i;
+      item.addEventListener('click', () => {
+        // 点击选中
+        const items = container.querySelectorAll('.picker-wheel-item');
+        items.forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        // 滚动到该位置
+        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      container.appendChild(item);
+    }
+  }
+
+  /** 获取滚轮当前选中值 */
+  function getWheelValue(container) {
+    const items = container.querySelectorAll('.picker-wheel-item');
+    const containerRect = container.getBoundingClientRect();
+    const centerY = containerRect.top + containerRect.height / 2;
+
+    let closest = items[0];
+    let minDist = Infinity;
+
+    items.forEach(item => {
+      const rect = item.getBoundingClientRect();
+      const itemCenter = rect.top + rect.height / 2;
+      const dist = Math.abs(itemCenter - centerY);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = item;
+      }
+    });
+
+    return parseInt(closest.dataset.value);
+  }
+
+  /** 同步高亮 */
+  function syncWheelHighlights(container) {
+    const items = container.querySelectorAll('.picker-wheel-item');
+    const containerRect = container.getBoundingClientRect();
+    const centerY = containerRect.top + containerRect.height / 2;
+
+    items.forEach(item => {
+      const rect = item.getBoundingClientRect();
+      const itemCenter = rect.top + rect.height / 2;
+      const dist = Math.abs(itemCenter - centerY);
+      item.classList.toggle('active', dist < 20);
+    });
+  }
+
+  /** 打开滚轮 */
+  function openPicker(target) {
+    const isStart = target === 'start';
+    pickerState.target = target;
+    pickerState.value = isStart ? settings.quietStart : settings.quietEnd;
+
+    buildWheelItems(pickerWheelStart, settings.quietStart);
+    buildWheelItems(pickerWheelEnd, settings.quietEnd);
+
+    // 滚动到选中位置
+    function scrollToSelected(container, val) {
+      const items = container.querySelectorAll('.picker-wheel-item');
+      for (const item of items) {
+        if (parseInt(item.dataset.value) === val) {
+          item.scrollIntoView({ block: 'center' });
+          break;
+        }
+      }
+    }
+    scrollToSelected(pickerWheelStart, settings.quietStart);
+    scrollToSelected(pickerWheelEnd, settings.quietEnd);
+
+    // 高亮当前选中的列
+    document.querySelectorAll('.picker-col-label').forEach((el, idx) => {
+      el.style.color = idx === (isStart ? 0 : 1) ? 'var(--accent)' : 'var(--text-dim)';
+    });
+
+    pickerOverlay.classList.add('open');
+
+    // 滚动时同步高亮
+    const onScroll = () => {
+      syncWheelHighlights(pickerWheelStart);
+      syncWheelHighlights(pickerWheelEnd);
+    };
+    pickerWheelStart.addEventListener('scroll', onScroll, { passive: true });
+    pickerWheelEnd.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  startBtn.addEventListener('click', () => openPicker('start'));
+  endBtn.addEventListener('click', () => openPicker('end'));
+
+  document.getElementById('pickerCancel').addEventListener('click', () => {
+    pickerOverlay.classList.remove('open');
+  });
+
+  document.getElementById('pickerConfirm').addEventListener('click', () => {
+    const newStart = getWheelValue(pickerWheelStart);
+    const newEnd = getWheelValue(pickerWheelEnd);
+    settings.quietStart = newStart;
+    settings.quietEnd = newEnd;
+    saveSettings();
+    updateTimeButtons();
+    // 刷新状态
+    const now = new Date();
+    const dndBadge = document.getElementById('dndBadge');
+    if (isQuietHours(now.getHours())) {
+      dndBadge.classList.add('visible');
+      document.body.classList.add('dnd-mode');
+    } else {
+      dndBadge.classList.remove('visible');
+      document.body.classList.remove('dnd-mode');
+    }
+    pickerOverlay.classList.remove('open');
+    showToast('免打扰时段已更新');
+  });
+
+  // 点击遮罩关闭
+  pickerOverlay.addEventListener('click', (e) => {
+    if (e.target === pickerOverlay) {
+      pickerOverlay.classList.remove('open');
+    }
+  });
+
+  // 振动
+  document.getElementById('vibrateEnabled').checked = settings.vibrate;
+  document.getElementById('vibrateEnabled').addEventListener('change', e => {
+    settings.vibrate = e.target.checked;
+    saveSettings();
+  });
+
+  // 测试按钮
+  document.getElementById('testBtn').addEventListener('click', () => {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const style = settings.style;
+
+    if (style === 'voice') {
+      const ok = speakTime(h, m);
+      if (!ok) {
+        // 详细诊断
+        const synth = getSpeechSynth();
+        let msg = '';
+        if (!synth) {
+          msg = '❌ 浏览器不支持 SpeechSynthesis API。\n\n解决办法：\n· 在设置中切换语音模式为「在线语音」\n· 或选择其他报时风格';
+        } else if (voiceEngineState === 'off') {
+          msg = '❌ 系统语音不可用。\n\n解决办法：\n· 在设置中切换语音模式为「在线语音」\n· 或选择其他报时风格';
+        } else if (voiceEngineState === 'warn') {
+          const dot = document.getElementById('voiceStatusText');
+          msg = '⚠️ ' + (dot ? dot.textContent : '系统语音异常') + '\n\n';
+          msg += '解决办法：\n';
+          msg += '1. 点击页面任意位置后重试\n';
+          msg += '2. 在设置中切换为「在线语音」模式\n';
+          msg += '3. 或切换到其他报时风格';
+        } else {
+          msg = '⚠️ 语音播报暂时无法使用。\n\n解决办法：\n· 在设置中切换语音模式为「在线语音」\n· 或切换到其他报时风格';
+        }
+        alert(msg);
+        return;
+      }
+      triggerChimeAnimation();
+      showToast('🗣️ 测试语音报时');
+    } else {
+      try {
+        if (style === 'bigben') playBigBen(h);
+        else if (style === 'doorbell') playDoorbell();
+        else if (style === 'melody') playMelody();
+        else if (style === 'soft') playSoft(h);
+      } catch (e) {
+        showToast('⚠️ 测试失败，请先点击页面任意位置激活音频');
+        return;
+      }
+      triggerChimeAnimation();
+      showToast('🔔 测试报时');
+    }
+  });
+
+  // 初始化时间按钮显示
+  updateTimeButtons();
+}
+
+function updateStatusDisplay() {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (settings.enabled) {
+    dot.className = 'status-dot on';
+    text.textContent = '整点报时已开启';
+  } else {
+    dot.className = 'status-dot off';
+    text.textContent = '整点报时已暂停';
+  }
+}
+
+// ============================================================
+//  启动
+// ============================================================
+loadSettings();
+bindUI();
+updateStatusDisplay();
+renderLog();
+
+// 每秒更新时钟
+setInterval(updateClock, 1000);
+updateClock();
+
+// 点击页面激活 AudioContext 和 SpeechSynthesis
+document.addEventListener('click', () => {
+  getAudioCtx();
+  // 预加载语音引擎
+  try {
+    const synth = getSpeechSynth();
+    if (synth) {
+      // 先执行一次 voices 检测，某些浏览器会在用户交互后才加载 voices
+      const v = synth.getVoices();
+      if (v.length > 0 && voiceEngineState === 'checking') {
+        processVoices(v);
+      }
+      // 用静默播报唤醒语音引擎
+      const dummy = new SpeechSynthesisUtterance(' ');
+      dummy.volume = 0;
+      synth.speak(dummy);
+      setTimeout(() => synth.cancel(), 30);
+    }
+  } catch (_) {}
+}, { once: true });
+
+// 页面加载后立即检测语音
+setTimeout(checkVoiceEngine, 300);
+
+// 页面可见性变化时刷新
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    // 用户重新回到页面，刷新状态
+    const now = new Date();
+    updateClock();
+    // 如果跨过整点/半点，补报
+    if (shouldChime(now)) {
+      doChime(now);
+    }
+  }
+});
+
+// 提前检查：就算页面在后台，也可能跨过整点
+// service worker 没法在纯静态页面中做后台计时，
+// 所以用户再次打开页面时会补报
+
+console.log('🕐 整点报时已启动！');
+</script>
+</body>
+</html>
