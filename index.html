@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tick-Tock · 整点报时</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a14;
+    --card: #12121e;
+    --surface: #1a1a2e;
+    --text: #e8e8f0;
+    --text-dim: #8888aa;
+    --accent: #ffd700;
+    --accent2: #4fc3f7;
+    --border: #2a2a44;
+  }
+
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ============ HERO ============ */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,215,0,0.06) 0%, transparent 70%);
+    top: -200px; right: -200px;
+    animation: glow-drift 8s ease-in-out infinite alternate;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(79,195,247,0.04) 0%, transparent 70%);
+    bottom: -100px; left: -100px;
+    animation: glow-drift 10s ease-in-out infinite alternate-reverse;
+  }
+
+  @keyframes glow-drift {
+    0%   { transform: translate(0, 0); }
+    100% { transform: translate(40px, 30px); }
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .logo {
+    font-size: 72px;
+    line-height: 1;
+    margin-bottom: 8px;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+
+  .hero h1 {
+    font-size: clamp(40px, 10vw, 72px);
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #fff 20%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .hero .subtitle {
+    font-size: 20px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    letter-spacing: 2px;
+  }
+
+  .hero .tagline {
+    font-size: 15px;
+    color: var(--accent);
+    opacity: 0.7;
+    margin-bottom: 32px;
+  }
+
+  /* ---- 时钟预览 ---- */
+  .clock-preview {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 20px 36px;
+    margin-bottom: 28px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  }
+
+  .clock-preview .time {
+    font-size: 56px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, #fff 30%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .clock-preview .seconds {
+    font-size: 24px;
+    color: var(--text-dim);
+    opacity: 0.5;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .clock-preview .date {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  /* ---- CTA 按钮 ---- */
+  .cta-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 32px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: 0.25s;
+    cursor: pointer;
+    border: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #ffaa00);
+    color: #0a0a14;
+    box-shadow: 0 4px 20px rgba(255,215,0,0.25);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(255,215,0,0.35);
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  /* ============ 分区通用 ============ */
+  section {
+    padding: 80px 24px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .section-title {
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .section-desc {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 15px;
+    max-width: 500px;
+    margin: 0 auto 48px;
+  }
+
+  /* ============ 特性 ============ */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .feature-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px;
+    transition: 0.25s;
+  }
+
+  .feature-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  }
+
+  .feature-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+  }
+
+  .feature-card h3 {
+    font-size: 17px;
+    margin-bottom: 8px;
+  }
+
+  .feature-card p {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+
+  /* ============ 如何使用 ============ */
+  .usage-steps {
+    display: grid;
+    gap: 16px;
+  }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+  }
+
+  .step-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #ffaa00);
+    color: #0a0a14;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .step-content h4 {
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+
+  .step-content p {
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .step-content code {
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
+  }
+
+  /* ============ 版本时间线 ============ */
+  .timeline {
+    position: relative;
+    padding-left: 32px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 12px; top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent2), transparent);
+    opacity: 0.3;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 28px;
+  }
+
+  .timeline-item:last-child {
+    padding-bottom: 0;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -24px; top: 6px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .timeline-version {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 15px;
+  }
+
+  .timeline-item p {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ============ 页脚 ============ */
+  footer {
+    text-align: center;
+    padding: 40px 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  footer a {
+    color: var(--accent2);
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    text-decoration: underline;
+  }
+
+  footer .footer-logo {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+
+  /* ============ 响应式 ============ */
+  @media (max-width: 600px) {
+    .clock-preview { padding: 16px 20px; }
+    .clock-preview .time { font-size: 38px; }
+    .clock-preview .seconds { font-size: 18px; }
+    .hero .subtitle { font-size: 17px; }
+    .btn { padding: 12px 24px; font-size: 15px; }
+    section { padding: 60px 16px; }
+  }
+
+  /* ============ 分隔线 ============ */
+  .divider {
+    width: 60px; height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin: 0 auto 48px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== HERO ========== -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="logo">🕐</div>
+    <h1>Tick-Tock</h1>
+    <div class="subtitle">整点报时 · 语音小工具</div>
+    <div class="tagline">Bong~ Bong~ 到点了！</div>
+
+    <!-- 实时时钟预览 -->
+    <div class="clock-preview" id="heroClock">
+      <div>
+        <div class="time">
+          <span id="hDisplay">00</span>:<span id="mDisplay">00</span>
+          <span class="seconds" id="sDisplay">00</span>
+        </div>
+        <div class="date" id="dDisplay">----年--月--日 星期-</div>
+      </div>
+    </div>
+
+    <div class="cta-buttons">
+      <a class="btn btn-primary" href="整点报时.html" target="_blank">
+        🚀 立即使用
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/Simiely/tick-tock" target="_blank">
+        📦 GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 特性 ========== -->
+<section>
+  <h2 class="section-title">✨ 功能特性</h2>
+  <p class="section-desc">一个 HTML 文件，搞定整点报时，浏览器打开即用。</p>
+  <div class="divider"></div>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🗣️</div>
+      <h3>语音报时</h3>
+      <p>到整点或半点，自动语音播报"现在时间，上午八点整"，系统语音与在线 TTS 双引擎。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔔</div>
+      <h3>4 种钟声</h3>
+      <p>大本钟、门铃、旋律、柔和——传统音效用 Web Audio 合成，不需要任何外部音频文件。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔕</div>
+      <h3>免打扰时段</h3>
+      <p>设置深夜静音区间，滚轮选择器像 iOS 一样上下滑动，优雅设置。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📋</div>
+      <h3>报时日志</h3>
+      <p>自动记录今日所有报时，设置持久化到本地存储，刷新不丢失。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📱</div>
+      <h3>移动端适配</h3>
+      <p>响应式设计，支持振动反馈，为后续打包 APK 做好准备。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌐</div>
+      <h3>在线 / 离线</h3>
+      <p>音效模式完全离线可用。语音模式支持 Google TTS 在线播报，解决 Android 兼容问题。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 使用说明 ========== -->
+<section>
+  <h2 class="section-title">🎯 如何使用</h2>
+  <p class="section-desc">三步走，开箱即用。</p>
+  <div class="divider"></div>
+
+  <div class="usage-steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h4>下载文件</h4>
+        <p>从 GitHub 下载 <code>整点报时.html</code>，或直接 <a href="整点报时.html" style="color:var(--accent2);">点此打开</a> 在线版。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h4>点击激活</h4>
+        <p>在页面上**随意点击一下**，激活语音引擎和音频上下文。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h4>等着报时</h4>
+        <p>等到整点，它就会开口告诉你现在几点。你也可以点"测试报时"先听个效果。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 版本 ========== -->
+<section>
+  <h2 class="section-title">📜 版本历程</h2>
+  <p class="section-desc">从第一声响到双引擎，每一步都是响亮的。</p>
+  <div class="divider"></div>
+
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="timeline-version">v3.0</span>
+      <p>双引擎语音——系统语音 + Google TTS 在线播报，Android 也不怕</p>
+    </div>
+    <div class="timeline-item">
+      <span class="timeline-version">v2.0</span>
+      <p>语音诊断——引擎检测、友好报错、一键排查</p>
+    </div>
+    <div class="timeline-item">
+      <span class="timeline-version">v1.0</span>
+      <p>初版发布——语音报时、滚轮选择器、免打扰时段、4 种钟声</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 页脚 ========== -->
+<footer>
+  <div class="footer-logo">🕐</div>
+  <p>
+    <a href="https://github.com/Simiely/tick-tock" target="_blank">tick-tock</a>
+    · Made with 🫶 and a bit of tick tock
+  </p>
+</footer>
+
+<script>
+// ========== 时钟更新 ==========
+const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+function tick() {
+  const n = new Date();
+  document.getElementById('hDisplay').textContent = String(n.getHours()).padStart(2,'0');
+  document.getElementById('mDisplay').textContent = String(n.getMinutes()).padStart(2,'0');
+  document.getElementById('sDisplay').textContent = String(n.getSeconds()).padStart(2,'0');
+  document.getElementById('dDisplay').textContent =
+    `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 星期${WEEK[n.getDay()]}`;
+}
+setInterval(tick, 1000);
+tick();
+</script>
+
+</body>
+</html>
